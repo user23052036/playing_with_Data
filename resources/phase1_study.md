@@ -47,9 +47,9 @@
 
 ## Numeric
 
-* `smallint`, `integer`, `bigint`
+* `smallint`, `integer`, `bigint`, `decimal`
 * `numeric(precision,scale)` for exact decimals (money)
-* `real`, `double precision` for floats
+* `real`,`float`, `double precision` for floats
 
 ## Serial / Identity (auto-increment)
 
