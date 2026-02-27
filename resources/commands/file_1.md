@@ -88,6 +88,14 @@ Shows:
 * Primary keys
 * Foreign keys
 
+### Reading `\d table` output (how to interpret)
+
+* Column list: name, type, nullable, default.
+* `nextval('seq'::regclass)` → identity/serial column.
+* Indexes / PRIMARY KEY / UNIQUE constraints appear after the columns.
+* Foreign keys shown as `REFERENCES other_table(col)`.
+
+
 ---
 
 ## 🔹 1.7 Describe Table with Extra Details
