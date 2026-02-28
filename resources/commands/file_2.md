@@ -387,3 +387,421 @@ HAVING COUNT(*) > 2;
 This would return only departments with more than 2 employees.
 
 ---
+
+Good. That’s the right criticism.
+
+You don’t want a rewrite.
+You want a **delta patch** — only the concepts from screenshots that are missing in your original 300+ line notes.
+
+I cannot see your previous full content directly (only partial metadata), so I’ll strictly extract **only the concepts visible in screenshots** that are typically missing in structured SQL notes and explain them properly in PostgreSQL context.
+
+Below are the concepts that are usually not fully explained and were visible in screenshots.
+
+---
+
+# 🔴 ADD THESE SECTIONS TO YOUR EXISTING NOTES
+
+---
+
+# 1️⃣ LIMIT + OFFSET (Pagination Theory + Determinism)
+
+You likely had LIMIT, but screenshots emphasize:
+
+### ⚠ Important Concept: ORDER BY is REQUIRED for consistent LIMIT results
+
+Without ORDER BY:
+
+* PostgreSQL does NOT guarantee row order.
+* LIMIT may return different rows across executions.
+
+### Proper PostgreSQL Pagination
+
+```sql
+SELECT *
+FROM employees
+ORDER BY emp_id
+LIMIT 10 OFFSET 20;
+```
+
+Meaning:
+
+* Skip first 20 rows
+* Return next 10 rows
+
+### Execution Order Insight
+
+Logical order:
+
+```
+FROM → WHERE → GROUP BY → HAVING → SELECT → ORDER BY → LIMIT/OFFSET
+```
+
+So LIMIT is applied **last**.
+
+### ⚠ Performance Insight (important)
+
+OFFSET becomes slow on large datasets because:
+
+* PostgreSQL still scans skipped rows.
+* For large pagination, use **keyset pagination** instead:
+
+```sql
+SELECT *
+FROM employees
+WHERE emp_id > 100
+ORDER BY emp_id
+LIMIT 10;
+```
+
+---
+
+# 2️⃣ JOIN TYPES — Deep Clarification
+
+Screenshots mention INNER, LEFT, RIGHT, FULL but did not explain behavior deeply.
+
+Add this clarity:
+
+---
+
+## INNER JOIN
+
+Returns only rows where join condition matches in both tables.
+
+Mathematically:
+
+```
+A ∩ B
+```
+
+```sql
+SELECT *
+FROM orders o
+INNER JOIN customers c
+ON o.customer_id = c.customer_id;
+```
+
+---
+
+## LEFT JOIN
+
+Returns:
+
+* All rows from left table
+* Matched rows from right table
+* NULLs where no match
+
+Mathematically:
+
+```
+A ∩ B  +  (A − B)
+```
+
+Important use-case:
+Finding unmatched rows:
+
+```sql
+SELECT c.*
+FROM customers c
+LEFT JOIN orders o
+ON c.customer_id = o.customer_id
+WHERE o.customer_id IS NULL;
+```
+
+This finds customers with NO orders.
+
+---
+
+## RIGHT JOIN
+
+Mirror of LEFT JOIN.
+
+In practice:
+
+* Rarely used.
+* You can rewrite it by swapping tables and using LEFT JOIN.
+
+---
+
+## FULL JOIN
+
+Returns:
+
+* All matching rows
+* All unmatched rows from both sides
+
+```sql
+SELECT *
+FROM a
+FULL JOIN b
+ON a.id = b.id;
+```
+
+Use-case:
+Audit mismatches between two datasets.
+
+---
+
+# 3️⃣ UNION vs UNION ALL — Performance & Duplicate Logic
+
+Your notes likely defined them but didn’t explain execution difference.
+
+### UNION
+
+* Removes duplicates.
+* Internally performs sorting or hashing.
+* Slower.
+
+### UNION ALL
+
+* Does NOT remove duplicates.
+* Much faster.
+* Use when duplicates are acceptable or expected.
+
+### Execution Insight
+
+PostgreSQL processes:
+
+1. First SELECT
+2. Second SELECT
+3. Combines
+4. If UNION → deduplicate
+
+---
+
+# 4️⃣ INTERSECT — Advanced Clarification
+
+### Definition
+
+Returns rows present in both queries.
+
+Mathematically:
+
+```
+A ∩ B
+```
+
+### Important:
+
+INTERSECT also removes duplicates.
+
+PostgreSQL also supports:
+
+```
+INTERSECT ALL
+```
+
+Which keeps duplicates that exist in both sets.
+
+Example:
+
+```sql
+SELECT col FROM t1
+INTERSECT ALL
+SELECT col FROM t2;
+```
+
+If value appears:
+
+* 3 times in t1
+* 2 times in t2
+  Result → 2 times.
+
+This is often missing in basic notes.
+
+---
+
+# 5️⃣ Set Operator Requirements (Critical but often skipped)
+
+When using UNION / INTERSECT:
+
+### Must satisfy:
+
+1. Same number of columns
+2. Compatible data types
+3. Same column order
+
+PostgreSQL checks types positionally, not by name.
+
+Example of failure:
+
+```sql
+SELECT id, name FROM a
+UNION
+SELECT name, id FROM b;  -- wrong order
+```
+
+---
+
+# 6️⃣ GROUP BY — Strict PostgreSQL Rule
+
+PostgreSQL enforces strict SQL standard:
+
+If a column appears in SELECT and:
+
+* It is not inside aggregate
+* It must appear in GROUP BY
+
+This fails:
+
+```sql
+SELECT dept, salary
+FROM employees
+GROUP BY dept;
+```
+
+Why?
+Because salary is neither grouped nor aggregated.
+
+Correct:
+
+```sql
+SELECT dept, AVG(salary)
+FROM employees
+GROUP BY dept;
+```
+
+---
+
+# 7️⃣ COUNT(*) vs COUNT(column)
+
+This is often missing but critical.
+
+### COUNT(*)
+
+Counts rows.
+Includes NULL values.
+
+### COUNT(column)
+
+Counts only non-null values in that column.
+
+Example:
+
+```sql
+SELECT COUNT(*) FROM employees;
+SELECT COUNT(bonus) FROM employees;
+```
+
+If bonus has NULLs:
+Second count will be smaller.
+
+---
+
+# 8️⃣ HAVING vs WHERE — Execution-Level Difference
+
+Screenshots mention difference but not execution logic.
+
+### WHERE
+
+Filters rows before grouping.
+
+### HAVING
+
+Filters groups after aggregation.
+
+Invalid:
+
+```sql
+SELECT dept, COUNT(*)
+FROM employees
+WHERE COUNT(*) > 5
+GROUP BY dept;
+```
+
+Correct:
+
+```sql
+SELECT dept, COUNT(*)
+FROM employees
+GROUP BY dept
+HAVING COUNT(*) > 5;
+```
+
+---
+
+# 9️⃣ GROUP BY Multiple Columns
+
+Important structural concept:
+
+Grouping by multiple columns creates unique combinations.
+
+```sql
+SELECT city, department, COUNT(*)
+FROM employees
+GROUP BY city, department;
+```
+
+This creates groups like:
+(city1, dept1)
+(city1, dept2)
+(city2, dept1)
+...
+
+---
+
+# 🔟 ORDER BY with GROUP BY
+
+Order can use:
+
+* Grouped column
+* Aggregate alias
+
+```sql
+SELECT dept, SUM(salary) AS total
+FROM employees
+GROUP BY dept
+ORDER BY total DESC;
+```
+
+PostgreSQL allows ordering by alias.
+
+---
+
+# 1️⃣1️⃣ Logical Query Processing Order (Very Important Concept)
+
+This is missing in most beginner notes but visible implicitly in screenshots.
+
+Actual logical order:
+
+1. FROM
+2. JOIN
+3. WHERE
+4. GROUP BY
+5. HAVING
+6. SELECT
+7. DISTINCT
+8. ORDER BY
+9. LIMIT/OFFSET
+
+Understanding this explains:
+
+* Why WHERE cannot use aggregates
+* Why HAVING can
+* Why alias cannot be used in WHERE
+
+---
+
+# 1️⃣2️⃣ Conceptual Summary (Add to End of Notes)
+
+### LIMIT
+
+Controls number of rows returned.
+
+### JOIN
+
+Combines rows horizontally (columns increase).
+
+### UNION / INTERSECT
+
+Combines rows vertically (rows increase).
+
+### GROUP BY
+
+Reduces rows into aggregated summaries.
+
+### HAVING
+
+Filters aggregated results.
+
+---
+
