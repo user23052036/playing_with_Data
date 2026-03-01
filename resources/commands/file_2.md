@@ -98,13 +98,6 @@
   ```sql
   SELECT * FROM employees WHERE salary BETWEEN 50000 AND 60000;
   ```
-
----
-
-Good. Now you're entering **aggregation + grouping**, which is where SQL actually becomes analytical.
-
-Below are **structured notes** only on the new concepts you practiced.
-
 ---
 
 # 🔹 Aggregate Functions
@@ -123,8 +116,24 @@ Result: `10`
 
 ### Important:
 
-* `COUNT(*)` → counts all rows.
-* `COUNT(column)` → counts non-null values in that column.
+#### COUNT(*)
+
+Counts rows.
+Includes NULL values.
+
+#### COUNT(column)
+
+Counts only non-null values in that column.
+
+Example:
+
+```sql
+SELECT COUNT(*) FROM employees;
+SELECT COUNT(bonus) FROM employees;
+```
+
+If bonus has NULLs:
+Second count will be smaller.
 
 ---
 
@@ -189,29 +198,35 @@ Result: `61000.00`
 
 ## 🔹 GROUP BY
 
-This is the most important new concept.
-
-### What it does:
-
 Groups rows that have the same value in specified column(s).
 
 Then aggregates per group.
 
----
+If a column appears in SELECT and:
 
-### ❌ Common Mistake You Made
+* It is not inside aggregate
+* It must appear in GROUP BY
+
+This fails:
 
 ```sql
-SELECT * FROM employees GROUP BY dept;
+SELECT dept, salary
+FROM employees
+GROUP BY dept;
 ```
 
-Error:
+Why?
+Because salary is neither grouped nor aggregated.
 
-> column must appear in GROUP BY or be used in aggregate function
+Correct:
 
-#### Why?
+```sql
+SELECT dept, AVG(salary)
+FROM employees
+GROUP BY dept;
+```
 
-Because once grouping happens, SQL doesn’t know which row’s `fname`, `salary`, etc. to show.
+SQL doesn’t know which row’s `fname`, `salary`, etc. to show.
 
 You must:
 
@@ -280,17 +295,23 @@ So:
 
 ---
 
-## 🔹 Advanced but Important
+### GROUP BY Multiple Columns
 
-### GROUP BY multiple columns
+Important structural concept:
+
+Grouping by multiple columns creates unique combinations.
 
 ```sql
-SELECT dept, hire_date, COUNT(*)
+SELECT city, department, COUNT(*)
 FROM employees
-GROUP BY dept, hire_date;
+GROUP BY city, department;
 ```
 
-Now grouping is by unique combinations.
+This creates groups like:
+(city1, dept1)
+(city1, dept2)
+(city2, dept1)
+...
 
 ---
 
@@ -366,13 +387,9 @@ But:
 
 ## 🔥 Next Logical Concept
 
-You are now ready for:
-
 ### HAVING clause
 
-Because:
-
-WHERE filters rows
+WHERE filters rows<br>
 HAVING filters groups
 
 Example:
@@ -388,22 +405,7 @@ This would return only departments with more than 2 employees.
 
 ---
 
-Good. That’s the right criticism.
-
-You don’t want a rewrite.
-You want a **delta patch** — only the concepts from screenshots that are missing in your original 300+ line notes.
-
-I cannot see your previous full content directly (only partial metadata), so I’ll strictly extract **only the concepts visible in screenshots** that are typically missing in structured SQL notes and explain them properly in PostgreSQL context.
-
-Below are the concepts that are usually not fully explained and were visible in screenshots.
-
----
-
-# 🔴 ADD THESE SECTIONS TO YOUR EXISTING NOTES
-
----
-
-# 1️⃣ LIMIT + OFFSET (Pagination Theory + Determinism)
+## LIMIT + OFFSET (Pagination Theory + Determinism)
 
 You likely had LIMIT, but screenshots emphasize:
 
@@ -433,10 +435,8 @@ Meaning:
 Logical order:
 
 ```
-FROM → WHERE → GROUP BY → HAVING → SELECT → ORDER BY → LIMIT/OFFSET
+SELECT → FROM → WHERE → GROUP BY → HAVING → ORDER BY → LIMIT/OFFSET
 ```
-
-So LIMIT is applied **last**.
 
 ### ⚠ Performance Insight (important)
 
@@ -455,13 +455,7 @@ LIMIT 10;
 
 ---
 
-# 2️⃣ JOIN TYPES — Deep Clarification
-
-Screenshots mention INNER, LEFT, RIGHT, FULL but did not explain behavior deeply.
-
-Add this clarity:
-
----
+## JOIN TYPES — Deep Clarification
 
 ## INNER JOIN
 
@@ -541,155 +535,190 @@ Audit mismatches between two datasets.
 
 ---
 
-# 3️⃣ UNION vs UNION ALL — Performance & Duplicate Logic
+## UNION vs UNION ALL — what’s the difference (fast, clear)
 
-Your notes likely defined them but didn’t explain execution difference.
+**Short answer**
 
-### UNION
+* `UNION` = combine rows **and remove duplicates**. (Slower.)
+* `UNION ALL` = combine rows **without removing duplicates**. (Fast.)
 
-* Removes duplicates.
-* Internally performs sorting or hashing.
-* Slower.
+**Execution steps (conceptual)**
 
-### UNION ALL
+1. Run first `SELECT` → produces result A
+2. Run second `SELECT` → produces result B
+3. Combine results (concatenate A + B)
+4. If operator = `UNION` → do deduplication (sort or hash) to remove duplicate rows
+   If operator = `UNION ALL` → skip dedupe, return combined rows immediately
 
-* Does NOT remove duplicates.
-* Much faster.
-* Use when duplicates are acceptable or expected.
+**Performance implication**
 
-### Execution Insight
-
-PostgreSQL processes:
-
-1. First SELECT
-2. Second SELECT
-3. Combines
-4. If UNION → deduplicate
+* Deduplication costs CPU and memory (usually a sort or a hash aggregate). That cost grows with row count and distinctness.
+* `UNION ALL` is typically much faster and scales better because it avoids that step.
 
 ---
 
-# 4️⃣ INTERSECT — Advanced Clarification
+## Concrete examples
 
-### Definition
-
-Returns rows present in both queries.
-
-Mathematically:
-
-```
-A ∩ B
-```
-
-### Important:
-
-INTERSECT also removes duplicates.
-
-PostgreSQL also supports:
-
-```
-INTERSECT ALL
-```
-
-Which keeps duplicates that exist in both sets.
-
-Example:
+Create two little example result sets:
 
 ```sql
-SELECT col FROM t1
-INTERSECT ALL
-SELECT col FROM t2;
+-- assume these are simple queries; I'm showing results, not creating tables
+-- Result of SELECT from A:
+--  a
+--  1
+--  2
+--  3
+
+-- Result of SELECT from B:
+--  a
+--  2
+--  3
+--  4
 ```
 
-If value appears:
-
-* 3 times in t1
-* 2 times in t2
-  Result → 2 times.
-
-This is often missing in basic notes.
-
----
-
-# 5️⃣ Set Operator Requirements (Critical but often skipped)
-
-When using UNION / INTERSECT:
-
-### Must satisfy:
-
-1. Same number of columns
-2. Compatible data types
-3. Same column order
-
-PostgreSQL checks types positionally, not by name.
-
-Example of failure:
+`UNION` (deduplicates and sorts implicitly only for dedupe — ordering is not guaranteed unless you use ORDER BY):
 
 ```sql
-SELECT id, name FROM a
+SELECT a FROM A
 UNION
-SELECT name, id FROM b;  -- wrong order
+SELECT a FROM B;
+```
+
+**Result** (order not guaranteed unless ORDER BY; logically contains each distinct value once):
+
+```
+1
+2
+3
+4
+```
+
+`UNION ALL` (no dedupe — all rows from both queries are returned):
+
+```sql
+SELECT a FROM A
+UNION ALL
+SELECT a FROM B;
+```
+
+**Result**:
+
+```
+1
+2
+3
+2
+3
+4
 ```
 
 ---
 
-# 6️⃣ GROUP BY — Strict PostgreSQL Rule
+## INTERSECT and INTERSECT ALL — exact behavior
 
-PostgreSQL enforces strict SQL standard:
-
-If a column appears in SELECT and:
-
-* It is not inside aggregate
-* It must appear in GROUP BY
-
-This fails:
-
-```sql
-SELECT dept, salary
-FROM employees
-GROUP BY dept;
-```
-
-Why?
-Because salary is neither grouped nor aggregated.
-
-Correct:
-
-```sql
-SELECT dept, AVG(salary)
-FROM employees
-GROUP BY dept;
-```
-
----
-
-# 7️⃣ COUNT(*) vs COUNT(column)
-
-This is often missing but critical.
-
-### COUNT(*)
-
-Counts rows.
-Includes NULL values.
-
-### COUNT(column)
-
-Counts only non-null values in that column.
+**`INTERSECT`**
+Returns rows that appear in both result sets, **duplicates removed** (like set intersection).
 
 Example:
 
-```sql
-SELECT COUNT(*) FROM employees;
-SELECT COUNT(bonus) FROM employees;
+```
+A: 1,1,2,3
+B: 1,2,2,4
 ```
 
-If bonus has NULLs:
-Second count will be smaller.
+`INTERSECT` → distinct rows present in both:
+
+```
+1
+2
+```
+
+**`INTERSECT ALL`** (Postgres supports this)
+Keeps duplicates up to the minimum multiplicity found in both sets.
+
+Using the same A and B above:
+
+* `1` appears 2 times in A and 1 time in B → appears min(2,1)=1 time in result
+* `2` appears 1 time in A and 2 times in B → appears min(1,2)=1 time
+
+So `INTERSECT ALL` result:
+
+```
+1
+2
+```
+
+If counts were different, result would show duplicates equal to the minimum count across the sets.
 
 ---
 
-# 8️⃣ HAVING vs WHERE — Execution-Level Difference
+## Important requirements for set operators (UNION / INTERSECT / EXCEPT)
 
-Screenshots mention difference but not execution logic.
+When combining queries with set operators:
+
+1. **Same number of columns** in each `SELECT`.
+2. **Each column must have compatible data types** (Postgres checks positionally). Example: `int` can often be combined with `numeric` but not with `text` without cast.
+3. **Column meanings are positional**, not by name. `SELECT id,name ... UNION SELECT name,id ...` will compile but will mix types/logical columns — don’t do it.
+4. `ORDER BY` **applies to the final combined result only** — if you put `ORDER BY` inside the first select, many engines will error or it will be ignored. Use `ORDER BY` at the very end (or wrap subqueries).
+5. Column aliases from the first `SELECT` are used for the final combined output in many DBs (so alias carefully).
+
+---
+
+## Examples tying it together (Postgres)
+
+Sample tables:
+
+```sql
+-- Venue_Master: (Event_Id text, Wifi text, Capacity int)
+-- Booking_Master: (Booking_Id text, Enquiry_Id text, Total_Amount int, Mode_of_Pay text)
+```
+
+Combine venues with wifi and online bookings (ID, Value):
+
+```sql
+SELECT Event_Id AS id, Capacity AS value
+FROM Venue_Master
+WHERE Wifi = 'Yes'
+
+UNION ALL
+
+SELECT Enquiry_Id AS id, Total_Amount AS value
+FROM Booking_Master
+WHERE Mode_of_Pay = 'Online'
+
+ORDER BY value DESC, id DESC;
+```
+
+Notes on that query:
+
+* `UNION ALL` used because we do not want deduplication and we want better performance.
+* `ORDER BY value DESC, id DESC` ensures deterministic order when `value` ties exist.
+
+---
+
+## Practical tips / gotchas (ruthless & useful)
+
+* If you **need no duplicates** → use `UNION`. But measure: if sets are large, consider alternatives (e.g., use joins/exists or dedupe earlier).
+* If you **don’t care about duplicates** or duplicates are meaningful → use `UNION ALL`. Always prefer this for performance unless dedupe is required.
+* If exact multiplicity matters, use `UNION ALL` + `GROUP BY` or `INTERSECT ALL` / `EXCEPT ALL` where supported.
+* **Always** provide a final `ORDER BY` if the test or UI expects deterministic ordering. When equal on primary sort column, add a secondary sort (e.g., `ORDER BY value DESC, id DESC`).
+* If types differ, cast explicitly: `SELECT col::text` or `CAST(col AS text)`.
+* If you must dedupe but want to avoid full-sort memory pressure, consider `SELECT DISTINCT` on a smaller intermediate set, or use a `HASH` aggregation if the engine supports it.
+* `UNION` ≈ `UNION ALL` + `DISTINCT` on the combined result. So `UNION` cost ≈ cost of producing A+B plus cost of `DISTINCT` (which is sort/hash).
+
+---
+
+## Quick checklist before writing set queries
+
+* [ ] Same column count?
+* [ ] Column types compatible (cast if needed)?
+* [ ] Do I want duplicates? (`UNION ALL`) or not? (`UNION`)
+* [ ] Final `ORDER BY` present for deterministic output?
+* [ ] If performance matters: test `UNION` vs `UNION ALL` + `DISTINCT` vs join/exists.
+
+---
+
+## HAVING vs WHERE — Execution-Level Difference
 
 ### WHERE
 
@@ -718,90 +747,3 @@ HAVING COUNT(*) > 5;
 ```
 
 ---
-
-# 9️⃣ GROUP BY Multiple Columns
-
-Important structural concept:
-
-Grouping by multiple columns creates unique combinations.
-
-```sql
-SELECT city, department, COUNT(*)
-FROM employees
-GROUP BY city, department;
-```
-
-This creates groups like:
-(city1, dept1)
-(city1, dept2)
-(city2, dept1)
-...
-
----
-
-# 🔟 ORDER BY with GROUP BY
-
-Order can use:
-
-* Grouped column
-* Aggregate alias
-
-```sql
-SELECT dept, SUM(salary) AS total
-FROM employees
-GROUP BY dept
-ORDER BY total DESC;
-```
-
-PostgreSQL allows ordering by alias.
-
----
-
-# 1️⃣1️⃣ Logical Query Processing Order (Very Important Concept)
-
-This is missing in most beginner notes but visible implicitly in screenshots.
-
-Actual logical order:
-
-1. FROM
-2. JOIN
-3. WHERE
-4. GROUP BY
-5. HAVING
-6. SELECT
-7. DISTINCT
-8. ORDER BY
-9. LIMIT/OFFSET
-
-Understanding this explains:
-
-* Why WHERE cannot use aggregates
-* Why HAVING can
-* Why alias cannot be used in WHERE
-
----
-
-# 1️⃣2️⃣ Conceptual Summary (Add to End of Notes)
-
-### LIMIT
-
-Controls number of rows returned.
-
-### JOIN
-
-Combines rows horizontally (columns increase).
-
-### UNION / INTERSECT
-
-Combines rows vertically (rows increase).
-
-### GROUP BY
-
-Reduces rows into aggregated summaries.
-
-### HAVING
-
-Filters aggregated results.
-
----
-
