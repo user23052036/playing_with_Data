@@ -1,14 +1,6 @@
 
 # 📘 PostgreSQL String Functions – Complete Notes
 
----
-
-# PART 1 — Function Definitions with Simple Examples
-
----
-
-## 1️⃣ CONCAT & CONCAT_WS
-
 ### ✅ CONCAT()
 
 Joins multiple strings.
